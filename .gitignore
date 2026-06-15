@@ -13,3 +13,6 @@ env.bak/
 venv.bak/ 
 
 node_modules/
+.next/
+dist/
+data/

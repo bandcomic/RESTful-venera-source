@@ -1,20 +1,37 @@
 {
   "name": "venera-source-converter",
   "version": "1.0.0",
-  "description": "将 Venera 漫画源转换为 REST API 服务",
-  "main": "server.js",
+  "description": "将 Venera 漫画源转换为腕上漫画自定义源 API",
+  "private": true,
+  "main": "dist/server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "server:dev": "tsx src/server.ts",
+    "server:build": "tsc -p tsconfig.server.json",
+    "server:start": "node dist/server.js",
+    "pm2:start": "npm run server:build && pm2 start ecosystem.config.cjs",
+    "pm2:restart": "npm run server:build && pm2 restart venera-source-converter",
+    "pm2:stop": "pm2 stop venera-source-converter",
+    "pm2:logs": "pm2 logs venera-source-converter",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "axios": "^1.6.0",
-    "jsdom": "^23.0.0",
-    "sharp": "^0.33.0",
-    "vm2": "^3.9.19"
+    "@fastify/cors": "^10.0.1",
+    "cheerio": "^1.0.0",
+    "fastify": "^5.2.1",
+    "next": "^15.1.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "sharp": "^0.33.5"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1"
+    "@types/node": "^22.10.5",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "pm2": "^5.4.3",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
   }
 }
