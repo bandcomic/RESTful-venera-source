@@ -34,10 +34,13 @@ function readBoolean(value: string | undefined, fallback: boolean): boolean {
 
 export function getAppConfig(): AppConfig {
   const deployTarget = (process.env.DEPLOY_TARGET === 'server' ? 'server' : 'vercel') as DeployTarget
+  const defaultEnabledSources = deployTarget === 'server'
+    ? ['copy_manga', 'manga_dex', 'nhentai', 'picacg']
+    : ['copy_manga', 'manga_dex']
 
   return {
     deployTarget,
-    enabledSources: readList(process.env.ENABLED_SOURCES, ['copy_manga', 'manga_dex', 'nhentai', 'picacg']),
+    enabledSources: readList(process.env.ENABLED_SOURCES, defaultEnabledSources),
     defaultImageWidth: readNumber(process.env.DEFAULT_IMAGE_WIDTH, 600),
     defaultImageQuality: readNumber(process.env.DEFAULT_IMAGE_QUALITY, 50),
     cacheDriver: (process.env.CACHE_DRIVER as AppConfig['cacheDriver']) || (deployTarget === 'server' ? 'file' : 'memory'),

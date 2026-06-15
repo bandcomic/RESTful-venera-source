@@ -1,6 +1,15 @@
 class Nhentai extends ComicSource {
     // Note: The fields which are marked as [Optional] should be removed if not used
 
+    checkResponse(res) {
+        if (res.status === 403 && res.body && res.body.includes("Just a moment")) {
+            throw "Cloudflare challenge: set NHENTAI_COOKIE and NHENTAI_USER_AGENT"
+        }
+        if(res.status !== 200) {
+            throw "Invalid Status Code: " + res.status
+        }
+    }
+
     // name of the source
     name = "nhentai"
 
@@ -141,9 +150,7 @@ class Nhentai extends ComicSource {
                     url = `${url}?page=${page}`
                 }
                 let res = await Network.get(url, {})
-                if(res.status !== 200) {
-                    throw "Invalid Status Code: " + res.status
-                }
+                this.checkResponse(res)
                 let doc = new HtmlDocument(res.body)
                 let data = []
                 if (url === this.baseUrl) {
@@ -255,9 +262,7 @@ class Nhentai extends ComicSource {
             sort = sort.replaceAll("@", "-")
             let url = `${this.baseUrl}/search/?q=${keyword}&page=${page}&sort=${sort}`
             let res = await Network.get(url);
-            if(res.status !== 200) {
-                throw "Invalid Status Code: " + res.status
-            }
+            this.checkResponse(res)
             return this.parseComicList(res.body)
         },
 
@@ -301,9 +306,7 @@ class Nhentai extends ComicSource {
                 "Referer": `${this.baseUrl}/g/${comicId}/`,
                 "X-Requested-With": "XMLHttpRequest"
             }, null)
-            if(res.status !== 200) {
-                throw "Invalid Status Code: " + res.status
-            }
+            this.checkResponse(res)
             if(res.status === 200) {
                 return true
             }
@@ -319,9 +322,7 @@ class Nhentai extends ComicSource {
         loadComics: async (page, folder) => {
             let url = `${this.baseUrl}/favorites?page=${page}`
             let res = await Network.get(url, {})
-            if(res.status !== 200) {
-                throw "Invalid Status Code: " + res.status
-            }
+            this.checkResponse(res)
             return this.parseComicList(res.body)
         }
     }
@@ -358,9 +359,7 @@ class Nhentai extends ComicSource {
                 id = id.replace("nh", "")
             }
             let res = await Network.get(`${this.baseUrl}/g/${id}/`, {})
-            if(res.status !== 200) {
-                throw "Invalid Status Code: " + res.status
-            }
+            this.checkResponse(res)
             let document = new HtmlDocument(res.body)
             let cover = document.querySelector("div#cover > a > img").attributes["data-src"];
             let title = document.querySelector("h2.title")?.text;
@@ -433,9 +432,7 @@ class Nhentai extends ComicSource {
                 comicId = comicId.replace("nh", "")
             }
             let res = await Network.get(`${this.baseUrl}/g/${comicId}/1/`, {})
-            if(res.status !== 200) {
-                throw "Invalid Status Code: " + res.status
-            }
+            this.checkResponse(res)
             let document = new HtmlDocument(res.body)
             let script = document.querySelectorAll("script").find((e) => {
                 return e.text.includes("window._gallery")
@@ -475,9 +472,7 @@ class Nhentai extends ComicSource {
          */
         loadComments: async (comicId, subId, page, replyTo) => {
             let res = await Network.get(`${this.baseUrl}/api/gallery/${comicId}/comments`, {})
-            if(res.status !== 200) {
-                throw "Invalid Status Code: " + res.status
-            }
+            this.checkResponse(res)
             let data = JSON.parse(res.body)
             let comments = data.map(c => {
                 return new Comment({

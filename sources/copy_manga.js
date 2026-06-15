@@ -702,19 +702,16 @@ class CopyManga extends ComicSource {
                 return JSON.parse(res.body).results.collect != null;
             }
             let reqId = await this.getReqID();
-            let results = await Promise.all([
-                Network.get(
-                    `${this.apiUrl}/api/v3/comic2/${id}?in_mainland=true&request_id=${reqId}&platform=3`,
-                    this.headers
-                ),
-                getFavoriteStatus.bind(this)(id)
-            ])
+            let detailRes = await Network.get(
+                `${this.apiUrl}/api/v3/comic2/${id}?in_mainland=true&request_id=${reqId}&platform=3`,
+                this.headers
+            )
 
-            if (results[0].status !== 200) {
-                throw `Invalid status code: ${res.status}`;
+            if (detailRes.status !== 200) {
+                throw `Invalid status code: ${detailRes.status}`;
             }
 
-            let data = JSON.parse(results[0].body).results;
+            let data = JSON.parse(detailRes.body).results;
             let comicData = data.comic;
 
             let title = comicData.name;
@@ -729,7 +726,12 @@ class CopyManga extends ComicSource {
             let tags = comicData.theme.map(e => e?.name).filter(name => name !== undefined && name !== null);
             let updateTime = comicData.datetime_updated ? comicData.datetime_updated : "";
             let description = comicData.brief;
-            let chapters = await getChapters(id, data.groups);
+            let chapters = new Map();
+            try {
+                chapters = await getChapters(id, data.groups);
+            } catch (e) {
+                chapters = new Map();
+            }
             let status = comicData.status.display;
 
             return {
@@ -743,7 +745,7 @@ class CopyManga extends ComicSource {
                     "状态": [status],
                 },
                 chapters: chapters,
-                isFavorite: results[1],
+                isFavorite: false,
                 subId: comicData.uuid
             }
         },

@@ -35,6 +35,19 @@
 4. 部署完成后访问 `https://<your-project>.vercel.app/config` 查看源配置。
 
 > **注意**：Vercel 为 Serverless 环境，图片处理（sharp）可能受内存限制，建议配合外部 CDN 使用。
+>
+> 默认情况下，Vercel 只启用 `copy_manga,manga_dex`。`nhentai` 经常受 Cloudflare/地区访问限制影响，`picacg` 需要登录态且 API 对 Serverless 出口较敏感。如果你确认自己的部署环境可访问，可在 Vercel 环境变量中设置：
+>
+> ```
+> ENABLED_SOURCES=copy_manga,manga_dex,nhentai,picacg
+> ```
+>
+> `nhentai` 如遇 403 Cloudflare 挑战页，可把已通过浏览器验证的 Cookie 配到环境变量：
+>
+> ```
+> NHENTAI_COOKIE=cf_clearance=...; csrftoken=...
+> NHENTAI_USER_AGENT=你的浏览器 User-Agent
+> ```
 
 ### 方式二：PM2 服务器部署
 

@@ -43,10 +43,23 @@ function getStore(store: Map<string, Record<string, any>>, key: string): Record<
   return next
 }
 
-function defaultHeaders(extra?: Record<string, string>): Record<string, string> {
+function defaultHeaders(sourceKey: string, extra?: Record<string, string>): Record<string, string> {
+  if (sourceKey === 'nhentai') {
+    return {
+      'User-Agent': process.env.NHENTAI_USER_AGENT || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+      ...extra
+    }
+  }
+
   return {
     ...extra
   }
+}
+
+function sourceCookie(sourceKey: string): string | undefined {
+  return process.env[`${sourceKey.toUpperCase()}_COOKIE`]
 }
 
 class Cookie {
@@ -238,18 +251,24 @@ function normalizeRequestUrl(url: string): string {
   }
 }
 
-function createNetwork(context?: RequestContext) {
+function createNetwork(sourceKey: string, context?: RequestContext) {
   async function request(method: string, url: string, headers: Record<string, string> = {}, data?: any, bytes = false) {
-    const mergedHeaders = defaultHeaders(headers)
-    if (context?.cookie && !mergedHeaders.Cookie && !mergedHeaders.cookie) {
-      mergedHeaders.Cookie = context.cookie
+    const mergedHeaders = defaultHeaders(sourceKey, headers)
+    const cookie = context?.cookie || sourceCookie(sourceKey)
+    if (cookie && !mergedHeaders.Cookie && !mergedHeaders.cookie) {
+      mergedHeaders.Cookie = cookie
     }
 
-    const response = await fetch(normalizeRequestUrl(url), {
-      method,
-      headers: mergedHeaders,
-      body: data == null || method === 'GET' ? undefined : typeof data === 'string' ? data : Buffer.from(data)
-    })
+    let response: Response
+    try {
+      response = await fetch(normalizeRequestUrl(url), {
+        method,
+        headers: mergedHeaders,
+        body: data == null || method === 'GET' ? undefined : typeof data === 'string' ? data : Buffer.from(data)
+      })
+    } catch (error) {
+      throw new Error(`Request failed: ${method} ${url} - ${error instanceof Error ? error.message : String(error)}`)
+    }
 
     const body = bytes ? new Uint8Array(await response.arrayBuffer()) : await response.text()
     const resultHeaders: Record<string, string> = {}
@@ -289,7 +308,7 @@ function createFetch(Network: ReturnType<typeof createNetwork>) {
 }
 
 function createContext(sourceKey: string, requestContext?: RequestContext): vm.Context {
-  const Network = createNetwork(requestContext)
+  const Network = createNetwork(sourceKey, requestContext)
   const Convert = createConvert()
 
   class ComicSource {
