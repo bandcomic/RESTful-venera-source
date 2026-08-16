@@ -119,7 +119,15 @@ function createApp(options = {}) {
 
     async function loadAllSources() {
         if (!fs.existsSync(sourcesDir)) {
-            fs.mkdirSync(sourcesDir, { recursive: true });
+            try {
+                fs.mkdirSync(sourcesDir, { recursive: true });
+            } catch (e) {
+                // 部署环境（如 EdgeOne）文件系统可能只读，目录不存在时直接返回空
+                if (e.code === 'ENOENT' || e.code === 'EROFS' || e.code === 'EPERM') {
+                    return [];
+                }
+                throw e;
+            }
             return [];
         }
         const files = fs.readdirSync(sourcesDir);
@@ -205,8 +213,9 @@ function createApp(options = {}) {
         const eoHost = req.headers['eo-pages-host'];
         if (eoHost) return `https://${String(eoHost).trim()}`;
 
-        let protocol = req.headers['x-forwarded-proto'] || req.protocol;
-        let host = req.get('host');
+        // 多级代理时取第一个值
+        let protocol = String(req.headers['x-forwarded-proto'] || req.protocol).split(',')[0].trim();
+        let host = String(req.get('host') || '').split(',')[0].trim();
         if (host && host.includes(':')) {
             const [hostname, port] = host.split(':');
             if (port === '443') {

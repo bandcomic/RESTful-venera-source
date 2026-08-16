@@ -7,11 +7,29 @@ const { Comic, ComicDetails, Comment } = require('./ComicTypes');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { createRequire } = require('module');
 
 // 引擎全局版本（对齐真实引擎的 appVersion 全局变量）
 const ENGINE_VERSION = '2.1.0';
 const ENGINE_LOCALE = 'zh_CN';
+
+// 预加载所有运行时模块：esbuild 打包时这些静态 require 会被 bundle 进产物，
+// vm 沙箱的 require 从预加载 Map 查表返回，避免打包后动态 require 文件系统路径失效
+const RUNTIME_MODULES = new Map([
+    ['Convert', require('./Convert')],
+    ['Network', require('./Network')],
+    ['HtmlDocument', require('./HtmlDocument')],
+    ['UI', require('./UI')],
+    ['Utils', require('./Utils')],
+    ['ComicTypes', require('./ComicTypes')],
+]);
+
+function runtimeRequire(id) {
+    const base = path.basename(id);
+    if (RUNTIME_MODULES.has(base)) {
+        return RUNTIME_MODULES.get(base);
+    }
+    throw new Error(`Runtime module not found: ${id}`);
+}
 
 class VeneraRuntime {
     constructor() {
@@ -181,10 +199,9 @@ module.exports = ${sourceClassName};
 
         const moduleCode = header + code + footer;
 
-        // 创建 vm 沙箱
-        const req = createRequire(path.join(runtimeDir, 'index.js'));
+        // 创建 vm 沙箱（require 指向预加载模块查表，打包后无需文件系统）
         const sandbox = {
-            require: req,
+            require: runtimeRequire,
             module: { exports: {} },
             exports: {},
             console,

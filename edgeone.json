@@ -1,5 +1,20 @@
 {
   "cloudFunctions": {
-    "maxDuration": 120
+    "nodejs": {
+      "maxDuration": 120,
+      "includeFiles": [
+        "cloud-functions/sources/**"
+      ],
+      "externalNodeModules": [
+        "@jsquash/webp",
+        "@jsquash/jpeg",
+        "@jsquash/png",
+        "@jsquash/avif",
+        "@jsquash/resize",
+        "jsdom",
+        "image-q"
+      ]
+    },
+    "overseasRegions": ["ap-singapore"]
   }
 }
