@@ -1,0 +1,5 @@
+{
+  "cloudFunctions": {
+    "maxDuration": 120
+  }
+}

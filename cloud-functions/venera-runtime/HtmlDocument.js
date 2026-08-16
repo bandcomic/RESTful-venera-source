@@ -80,7 +80,9 @@ class HtmlElement {
      */
     getElementById(id) {
         if (!this._element) return null;
-        const el = this._element.querySelector('#' + id);
+        const win = this._element.ownerDocument && this._element.ownerDocument.defaultView;
+        const escaped = (win && win.CSS && win.CSS.escape) ? win.CSS.escape(id) : String(id).replace(/["\\\n\r\t\f]/g, '\\$&');
+        const el = this._element.querySelector('#' + escaped);
         return el ? new HtmlElement(el) : null;
     }
 
@@ -142,6 +144,14 @@ class HtmlElement {
     }
 
     /**
+     * 获取内部 HTML（真实 API 名称为 innerHTML）
+     * @returns {string}
+     */
+    get innerHTML() {
+        return this.innerHtml;
+    }
+
+    /**
      * 获取类名列表
      * @returns {string[]}
      */
@@ -176,12 +186,28 @@ class HtmlElement {
     }
 
     /**
+     * 获取前一个兄弟元素（真实 API 名称）
+     * @returns {HtmlElement | null}
+     */
+    get previousElementSibling() {
+        return this.previousSibling;
+    }
+
+    /**
      * 获取后一个兄弟元素
      * @returns {HtmlElement | null}
      */
     get nextSibling() {
         if (!this._element || !this._element.nextElementSibling) return null;
         return new HtmlElement(this._element.nextElementSibling);
+    }
+
+    /**
+     * 获取后一个兄弟元素（真实 API 名称）
+     * @returns {HtmlElement | null}
+     */
+    get nextElementSibling() {
+        return this.nextSibling;
     }
 
     /**

@@ -1,34 +1,31 @@
 # Venera Source Converter
 
-**Venera Source Converter** 是一个强大的中间件服务，旨在将 **Venera** 漫画阅读器的 JavaScript 漫画源无缝转换为通用的 REST API 格式。通过本项目，您可以轻松地将 Venera 丰富的漫画源生态复用到其他不支持 JS 插件的漫画阅读器或自定义前端中。
+**Venera Source Converter** 是一个中间件服务，将 **Venera** 漫画阅读器的 JavaScript 漫画源转换为通用 REST API 格式，可接入任意支持 HTTP 自定义漫画源协议的客户端。
 
-本项目不仅实现了核心的转换逻辑，还针对网络稳定性、反爬虫机制和图片代理进行了深度优化，确保在各种网络环境下都能稳定运行。
+支持 **双部署**：VPS/本地（Express 直跑）与腾讯云 **EdgeOne Pages 云函数**（Node.js v20，无需 sharp 等原生依赖，全 WASM 图片管线）。
 
 ## ✨ 核心特点
 
-*   **无缝兼容 Venera 源**：直接加载 Venera 的 `.js` 漫画源文件，无需修改源码即可运行。完美模拟 Venera 运行时环境（包括 `Network`, `HtmlDocument`, `Crypto`, `UI` 等 API）。
-*   **标准化 REST API**：将复杂的 JS 逻辑转换为统一的 JSON 格式接口，支持：
-    *   **搜索** (`/search/:text/:page`)
-    *   **详情** (`/comic/:id`)
-    *   **章节图片** (`/photo/:id/chapter/:chapter`)
-    *   **源配置** (`/config`)
-*   **智能图片代理**：
-    *   内置强大的图片反向代理 (`/proxy`)，自动处理防盗链（Referer）、Headers 签名等问题。
-    *   **并发控制与排队**：内置请求队列，防止高并发导致 IP 被封或服务崩溃。
-    *   **格式自动转换**：智能将 WebP 等格式转换为通用的 JPEG/PNG，确保在所有设备上的兼容性。
-    *   **自动重试与保活**：针对不稳定网络（如 `socket hang up`）实现了自动重试机制，大幅提高成功率。
-*   **动态源管理**：
-    *   **自动刷新**：后台定时任务自动刷新源配置，无需手动重启。
-    *   **热重载**：支持通过 `/reload` 接口热加载新的源文件。
-*   **高度容错**：
-    *   智能识别单篇/本子与连载漫画，自动修正页数与章节显示逻辑。
-    *   自动处理 URL 协议（HTTP/HTTPS）和端口问题，生成规范的链接。
+- **无缝兼容 Venera 源**：直接加载 `.js` 漫画源文件，在 `node:vm` 沙箱中模拟完整 Venera 运行时（`Network` / `HtmlDocument` / `Convert` / `UI` / `APP` / Cookie jar / `isLogged` / `translate` 等）。
+- **标准化 REST API**：
+  - `GET /config` —— 源配置（sourceKey 使用源内部 `key`）
+  - `GET /search/<text>/<page>?source=<key>` —— 搜索
+  - `GET /comic/<id>?source=<key>` —— 详情
+  - `GET /comic/<id>/cover?source=<key>` —— 封面（TTL 缓存）
+  - `GET /photo/<id>/chapter/<n>?source=<key>` —— 章节图片列表
+  - `GET /photo/<id>/chapter/<n>/<page>.jpg?source=<key>` —— 单页图片
+- **完整图片管线**（纯 WASM，无原生依赖）：
+  - 解码：webp / jpeg / png / **avif**
+  - 输出：JPEG（质量可调）、PNG（颜色量化）、**LVGL 预解码二进制**（4 字节头 + BGRA 调色板 + 1 字节索引）
+  - 参数：`width`、`quality`、`ifPNG=1`、`ifLVGL=1`（`ifLVGL` 优先于 `ifPNG`）
+  - 支持源的 `onImageLoad` / `onThumbnailLoad` / `onLoadFailed` 钩子与 **`modifyImage`** 图片解混淆脚本（如 jm 的竖向条带重排）
+- **Cookie 透传**：客户端请求携带的 Cookie 头会注入源的请求上下文（仅限源声明的域名），`Network.getCookies` 可读取，支持付费/登录内容。
+- **TTL 缓存**：详情 30 分钟 / 章节列表 60 分钟 / 章节图片 2 小时 / 封面 60 分钟；带 Cookie 的请求不读写缓存（防止付费内容泄露与用户串扰）。
+- **容错**：图片下载失败自动刷新章节数据重试一次；网络错误指数退避重试；请求级信号量并发控制（5 并发）。
 
 ## 🚀 快速开始
 
 ### 1. 安装依赖
-
-确保您已安装 Node.js (推荐 v16+)。
 
 ```bash
 npm install
@@ -36,41 +33,64 @@ npm install
 
 ### 2. 添加漫画源
 
-将 Venera 的 `.js` 漫画源文件放入 `sources` 目录中。
+将 Venera 的 `.js` 漫画源文件放入 `cloud-functions/sources` 目录（或通过 `SOURCES_DIR` 环境变量指定其他目录）。
 
-### 3. 启动服务
+### 3. 本地启动
 
 ```bash
-# 默认在 3000 端口启动
-npm start
-
-# 或者指定端口
-npm start -- 8080
+npm start          # 默认 3000 端口
+npm start -- 8080  # 指定端口
 ```
-
-服务启动后，访问 `http://localhost:3000` 即可查看运行状态。
 
 ### 4. API 使用示例
 
-*   **获取源配置**：
-    `GET /config`
-*   **搜索漫画**：
-    `GET /search/<text>/1?source=<source>`
-*   **获取漫画详情**：
-    `GET /comic/<id>?source=<source>`
-*   **获取章节图片**：
-    `GET /photo/<id>/chapter/<chapter>?source=<source>`
+```bash
+# 获取源配置
+curl http://localhost:3000/config
 
-## ❤️ 致谢 Venera
+# 搜索
+curl 'http://localhost:3000/search/%E6%B5%B7%E8%B4%BC%E7%8E%8B/1?source=manga_dex'
 
-本项目的诞生离不开 [**Venera**](https://github.com/venera-app) 及其社区的杰出贡献。
+# 详情 / 封面 / 章节列表 / 单页图片
+curl 'http://localhost:3000/comic/<id>?source=manga_dex'
+curl 'http://localhost:3000/photo/<id>/chapter/1?source=manga_dex'
+curl 'http://localhost:3000/photo/<id>/chapter/1/1.jpg?source=manga_dex&width=600&quality=50&ifPNG=1&ifLVGL=1'
+```
 
-特别感谢 **Venera** 项目组：
-*   感谢你们设计了如此灵活且强大的漫画源插件系统，让漫画阅读变得如此自由和便捷。
-*   感谢你们开源了高质量的漫画源实现，为本项目提供了核心的数据获取逻辑。
-*   Venera 对漫画源生态的规范化定义，是本项目能够实现通用转换的基石。
+## ☁️ EdgeOne Pages 部署
 
-我们深知开源不易，谨以此项目向 Venera 致敬，希望能让更多人享受到 Venera 生态带来的便利！
+项目根目录的 `cloud-functions/` 为 EdgeOne Pages 云函数（Node.js v20，Express 框架模式），`edgeone.json` 配置了 `maxDuration: 120`。
+
+1. 将仓库导入 EdgeOne Makers（导入 Git 仓库）。
+2. 公网地址经 `Eo-Pages-Host` 请求头自动识别；若有异常可配置环境变量 `PUBLIC_URL=https://your-domain` 强制指定。
+
+可选环境变量：
+
+| 变量 | 说明 |
+| --- | --- |
+| `PUBLIC_URL` | 强制指定对外基础地址（EdgeOne 上通常不需要） |
+| `SOURCES_DIR` | 漫画源目录（默认 `cloud-functions/sources`） |
+
+> 上游多为海外站点，建议在 `edgeone.json` 的 `cloudFunctions` 中配置 `overseasRegions`（如 `["ap-singapore"]`）。
+
+## 🧪 全量源测试
+
+```bash
+# 拉取 venera-configs 官方 33 个源并逐个验证（搜索→详情→章节→图片）
+npm run test:sources
+
+# 测试单个源
+node scripts/test-all-sources.js jm
+```
+
+测试脚本会输出四档结果：端到端可用 / 部分可用 / 搜索失败（登录/验证码/地区/上游变更）。详细结果写入 `/tmp/vsc-test-results.json`。
+
+## ❤️ 致谢
+
+- [Venera](https://github.com/venera-app) 及其社区：JS 漫画源生态与运行时 API 定义
+- [@jsquash](https://github.com/jamsinclair/jsquash)：纯 WASM 图片编解码
+- [image-q](https://github.com/igor-bezkrovnyi/image-quantization)：颜色量化
 
 ---
+
 *本项目仅供学习交流使用，请勿用于非法用途。*

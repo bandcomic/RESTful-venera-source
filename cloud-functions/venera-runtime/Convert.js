@@ -112,13 +112,25 @@ class Convert {
     }
 
     /**
+     * 根据 key 长度选择 AES 算法（16/24/32 字节 → 128/192/256）
+     */
+    static _aesKeyAlgo(key) {
+        const len = Buffer.from(key).length;
+        if (len <= 16) return 'aes-128';
+        if (len <= 24) return 'aes-192';
+        return 'aes-256';
+    }
+
+    /**
      * AES ECB 解密
      * @param {Uint8Array} value
      * @param {Uint8Array} key
      * @returns {Uint8Array}
      */
     static decryptAesEcb(value, key) {
-        const decipher = crypto.createDecipheriv('aes-128-ecb', Buffer.from(key).slice(0, 16), Buffer.alloc(0));
+        const algo = this._aesKeyAlgo(key);
+        const keyBuf = Buffer.from(key).slice(0, 32);
+        const decipher = crypto.createDecipheriv(`${algo}-ecb`, keyBuf, Buffer.alloc(0));
         decipher.setAutoPadding(true);
         const decrypted = Buffer.concat([decipher.update(Buffer.from(value)), decipher.final()]);
         return new Uint8Array(decrypted);
@@ -132,7 +144,9 @@ class Convert {
      * @returns {Uint8Array}
      */
     static decryptAesCbc(value, key, iv) {
-        const decipher = crypto.createDecipheriv('aes-128-cbc', Buffer.from(key).slice(0, 16), Buffer.from(iv).slice(0, 16));
+        const algo = this._aesKeyAlgo(key);
+        const keyBuf = Buffer.from(key).slice(0, 32);
+        const decipher = crypto.createDecipheriv(`${algo}-cbc`, keyBuf, Buffer.from(iv).slice(0, 16));
         decipher.setAutoPadding(true);
         const decrypted = Buffer.concat([decipher.update(Buffer.from(value)), decipher.final()]);
         return new Uint8Array(decrypted);
@@ -146,7 +160,10 @@ class Convert {
      * @returns {Uint8Array}
      */
     static decryptAesCfb(value, key, iv) {
-        const decipher = crypto.createDecipheriv('aes-128-cfb', Buffer.from(key).slice(0, 16), Buffer.from(iv).slice(0, 16));
+        const algo = this._aesKeyAlgo(key);
+        const keyBuf = Buffer.from(key).slice(0, 32);
+        const decipher = crypto.createDecipheriv(`${algo}-cfb`, keyBuf, Buffer.from(iv).slice(0, 16));
+        decipher.setAutoPadding(false);
         const decrypted = Buffer.concat([decipher.update(Buffer.from(value)), decipher.final()]);
         return new Uint8Array(decrypted);
     }
@@ -159,7 +176,10 @@ class Convert {
      * @returns {Uint8Array}
      */
     static decryptAesOfb(value, key, iv) {
-        const decipher = crypto.createDecipheriv('aes-128-ofb', Buffer.from(key).slice(0, 16), Buffer.from(iv).slice(0, 16));
+        const algo = this._aesKeyAlgo(key);
+        const keyBuf = Buffer.from(key).slice(0, 32);
+        const decipher = crypto.createDecipheriv(`${algo}-ofb`, keyBuf, Buffer.from(iv).slice(0, 16));
+        decipher.setAutoPadding(false);
         const decrypted = Buffer.concat([decipher.update(Buffer.from(value)), decipher.final()]);
         return new Uint8Array(decrypted);
     }
