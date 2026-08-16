@@ -91,7 +91,7 @@ async function runSource(key, serverBase) {
 
   // 1. 搜索
   const kw = (KEYWORDS[key] || ['a'])[0];
-  const sRes = await httpGet(`${serverBase}/search/${encodeURIComponent(kw)}/1?source=${encodeURIComponent(key)}`, 90000);
+  const sRes = await httpGet(`${serverBase}/${encodeURIComponent(key)}/search/${encodeURIComponent(kw)}/1`, 90000);
   let comicId = null;
   if (sRes.status === 200) {
     try {
@@ -109,7 +109,7 @@ async function runSource(key, serverBase) {
 
   // 2. 详情
   if (comicId) {
-    const dRes = await httpGet(`${serverBase}/comic/${encodeURIComponent(comicId)}?source=${encodeURIComponent(key)}`, 90000);
+    const dRes = await httpGet(`${serverBase}/${encodeURIComponent(key)}/comic/${encodeURIComponent(comicId)}`, 90000);
     if (dRes.status === 200) {
       try {
         const data = JSON.parse(dRes.text);
@@ -123,7 +123,7 @@ async function runSource(key, serverBase) {
 
     // 3. 章节列表
     if (result.detail && result.detail.ok) {
-      const pRes = await httpGet(`${serverBase}/photo/${encodeURIComponent(comicId)}/chapter/1?source=${encodeURIComponent(key)}`, 90000);
+      const pRes = await httpGet(`${serverBase}/${encodeURIComponent(key)}/photo/${encodeURIComponent(comicId)}/chapter/1`, 90000);
       if (pRes.status === 200) {
         try {
           const data = JSON.parse(pRes.text);

@@ -560,9 +560,9 @@ function createApp(options = {}) {
             config[key] = {
                 name: info.name,
                 apiUrl,
-                detailPath: `/comic/<id>?source=${encodeURIComponent(key)}`,
-                photoPath: `/photo/<id>/chapter/<chapter>?source=${encodeURIComponent(key)}`,
-                searchPath: `/search/<text>/<page>?source=${encodeURIComponent(key)}`,
+                detailPath: `/${encodeURIComponent(key)}/comic/<id>`,
+                photoPath: `/${encodeURIComponent(key)}/photo/<id>/chapter/<chapter>`,
+                searchPath: `/${encodeURIComponent(key)}/search/<text>/<page>`,
                 type: key,
             };
         }
@@ -570,11 +570,11 @@ function createApp(options = {}) {
     });
 
     // 漫画详情
-    app.get('/comic/:id', async (req, res) => {
+    app.get('/:source/comic/:id', async (req, res) => {
         try {
             const { id } = req.params;
-            const source = await getSource(req.query.source);
-            if (!source) throw new ApiError(404, `Source not found: ${req.query.source}`);
+            const source = await getSource(req.params.source);
+            if (!source) throw new ApiError(404, `Source not found: ${req.params.source}`);
             if (!source.comic || !source.comic.loadInfo) {
                 throw new ApiError(501, 'Source does not support comic details');
             }
@@ -617,7 +617,7 @@ function createApp(options = {}) {
             const baseUrl = getBaseUrl(req);
             const sourceKey = source.key || source.name;
             const cover = details.cover
-                ? `${baseUrl}/comic/${encodeURIComponent(id)}/cover?source=${encodeURIComponent(sourceKey)}`
+                ? `${baseUrl}/${encodeURIComponent(sourceKey)}/comic/${encodeURIComponent(id)}/cover`
                 : '';
 
             res.json({
@@ -636,12 +636,12 @@ function createApp(options = {}) {
     });
 
     // 漫画封面
-    app.get('/comic/:id/cover', async (req, res) => {
+    app.get('/:source/comic/:id/cover', async (req, res) => {
         await acquire();
         try {
             const { id } = req.params;
-            const source = await getSource(req.query.source);
-            if (!source) throw new ApiError(404, `Source not found: ${req.query.source}`);
+            const source = await getSource(req.params.source);
+            if (!source) throw new ApiError(404, `Source not found: ${req.params.source}`);
             const cookie = getClientCookie(req);
 
             let coverUrl = null;
@@ -668,11 +668,11 @@ function createApp(options = {}) {
     });
 
     // 章节图片列表
-    app.get('/photo/:id/chapter/:chapter', async (req, res) => {
+    app.get('/:source/photo/:id/chapter/:chapter', async (req, res) => {
         try {
             const { id, chapter } = req.params;
-            const source = await getSource(req.query.source);
-            if (!source) throw new ApiError(404, `Source not found: ${req.query.source}`);
+            const source = await getSource(req.params.source);
+            if (!source) throw new ApiError(404, `Source not found: ${req.params.source}`);
             if (!source.comic || !source.comic.loadEp) {
                 throw new ApiError(501, 'Source does not support loading episodes');
             }
@@ -717,7 +717,7 @@ function createApp(options = {}) {
             const sourceKey = source.key || source.name;
             const encodedId = encodeURIComponent(id);
             const images = epData.images.map((_, index) => ({
-                url: `${baseUrl}/photo/${encodedId}/chapter/${chapterNumber}/${index + 1}.jpg?source=${encodeURIComponent(sourceKey)}`,
+                url: `${baseUrl}/${encodeURIComponent(sourceKey)}/photo/${encodedId}/chapter/${chapterNumber}/${index + 1}.jpg`,
             }));
 
             res.json({ title: chapterTitle, images });
@@ -727,12 +727,12 @@ function createApp(options = {}) {
     });
 
     // 章节单页图片
-    app.get('/photo/:id/chapter/:chapter/:page', async (req, res) => {
+    app.get('/:source/photo/:id/chapter/:chapter/:page', async (req, res) => {
         await acquire();
         try {
             const { id, chapter, page } = req.params;
-            const source = await getSource(req.query.source);
-            if (!source) throw new ApiError(404, `Source not found: ${req.query.source}`);
+            const source = await getSource(req.params.source);
+            if (!source) throw new ApiError(404, `Source not found: ${req.params.source}`);
 
             const chapterNumber = parseInt(chapter, 10);
             const pageMatch = String(page).match(/^(\d+)/);
@@ -794,11 +794,11 @@ function createApp(options = {}) {
     });
 
     // 搜索
-    app.get('/search/:text/:page', async (req, res) => {
+    app.get('/:source/search/:text/:page', async (req, res) => {
         try {
             const { text, page } = req.params;
-            const source = await getSource(req.query.source);
-            if (!source) throw new ApiError(404, `Source not found: ${req.query.source}`);
+            const source = await getSource(req.params.source);
+            if (!source) throw new ApiError(404, `Source not found: ${req.params.source}`);
             if (!source.search || !source.search.load) {
                 throw new ApiError(501, 'Source does not support search');
             }
@@ -840,7 +840,7 @@ function createApp(options = {}) {
                     comic_id: comic.id,
                     title: comic.title || String(comic.id),
                     cover_url: comic.cover
-                        ? `${baseUrl}/comic/${encodeURIComponent(comic.id)}/cover?source=${encodeURIComponent(sourceKey)}`
+                        ? `${baseUrl}/${encodeURIComponent(sourceKey)}/comic/${encodeURIComponent(comic.id)}/cover`
                         : '',
                     pages: comic.maxPage || 0,
                 }));

@@ -7,13 +7,13 @@
 ## ✨ 核心特点
 
 - **无缝兼容 Venera 源**：直接加载 `.js` 漫画源文件，在 `node:vm` 沙箱中模拟完整 Venera 运行时（`Network` / `HtmlDocument` / `Convert` / `UI` / `APP` / Cookie jar / `isLogged` / `translate` 等）。
-- **标准化 REST API**：
+- **标准化 REST API**（sourceKey 在路径中，RESTful 风格）：
   - `GET /config` —— 源配置（sourceKey 使用源内部 `key`）
-  - `GET /search/<text>/<page>?source=<key>` —— 搜索
-  - `GET /comic/<id>?source=<key>` —— 详情
-  - `GET /comic/<id>/cover?source=<key>` —— 封面（TTL 缓存）
-  - `GET /photo/<id>/chapter/<n>?source=<key>` —— 章节图片列表
-  - `GET /photo/<id>/chapter/<n>/<page>.jpg?source=<key>` —— 单页图片
+  - `GET /<key>/search/<text>/<page>` —— 搜索
+  - `GET /<key>/comic/<id>` —— 详情
+  - `GET /<key>/comic/<id>/cover` —— 封面（TTL 缓存）
+  - `GET /<key>/photo/<id>/chapter/<n>` —— 章节图片列表
+  - `GET /<key>/photo/<id>/chapter/<n>/<page>.jpg` —— 单页图片
 - **完整图片管线**（纯 WASM，无原生依赖）：
   - 解码：webp / jpeg / png / **avif**
   - 输出：JPEG（质量可调）、PNG（颜色量化）、**LVGL 预解码二进制**（4 字节头 + BGRA 调色板 + 1 字节索引）
@@ -49,12 +49,13 @@ npm start -- 8080  # 指定端口
 curl http://localhost:3000/config
 
 # 搜索
-curl 'http://localhost:3000/search/%E6%B5%B7%E8%B4%BC%E7%8E%8B/1?source=manga_dex'
+curl 'http://localhost:3000/manga_dex/search/%E6%B5%B7%E8%B4%BC%E7%8E%8B/1'
 
 # 详情 / 封面 / 章节列表 / 单页图片
-curl 'http://localhost:3000/comic/<id>?source=manga_dex'
-curl 'http://localhost:3000/photo/<id>/chapter/1?source=manga_dex'
-curl 'http://localhost:3000/photo/<id>/chapter/1/1.jpg?source=manga_dex&width=600&quality=50&ifPNG=1&ifLVGL=1'
+curl 'http://localhost:3000/manga_dex/comic/<id>'
+curl 'http://localhost:3000/manga_dex/comic/<id>/cover?width=80'
+curl 'http://localhost:3000/manga_dex/photo/<id>/chapter/1'
+curl 'http://localhost:3000/manga_dex/photo/<id>/chapter/1/1.jpg?width=600&quality=50&ifPNG=1&ifLVGL=1'
 ```
 
 ## ☁️ EdgeOne Pages 部署
