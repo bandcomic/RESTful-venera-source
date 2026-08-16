@@ -84,7 +84,16 @@ function createApp(options = {}) {
     const app = express();
     app.disable('x-powered-by');
 
-    const sourcesDir = options.sourcesDir || process.env.SOURCES_DIR || path.join(__dirname, 'sources');
+    // sources 目录解析：本地开发用 cloud-functions/sources；
+    // EdgeOne 构建后 includeFiles 会被复制到函数包内 included_files/ 下
+    const candidates = [
+        options.sourcesDir,
+        process.env.SOURCES_DIR,
+        path.join(__dirname, 'sources'),
+        path.join(__dirname, 'included_files', 'cloud-functions', 'sources'),
+        path.join(process.cwd(), 'included_files', 'cloud-functions', 'sources'),
+    ].filter(Boolean);
+    const sourcesDir = candidates.find((d) => fs.existsSync(d)) || candidates[2];
     const runtime = new VeneraRuntime();
 
     // 缓存

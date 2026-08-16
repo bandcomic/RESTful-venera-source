@@ -59,19 +59,45 @@ curl 'http://localhost:3000/photo/<id>/chapter/1/1.jpg?source=manga_dex&width=60
 
 ## ☁️ EdgeOne Pages 部署
 
-项目根目录的 `cloud-functions/` 为 EdgeOne Pages 云函数（Node.js v20，Express 框架模式），`edgeone.json` 配置了 `maxDuration: 120`。
+项目根目录的 `cloud-functions/` 为 EdgeOne Pages 云函数（Node.js v20，Express 框架模式）。
 
-1. 将仓库导入 EdgeOne Makers（导入 Git 仓库）。
-2. 公网地址经 `Eo-Pages-Host` 请求头自动识别；若有异常可配置环境变量 `PUBLIC_URL=https://your-domain` 强制指定。
+**入口约定**（构建器通过 AST 静态识别）：
+- `cloud-functions/[[default]].js` 为框架模式入口，必须显式包含 `import express from "express"` + `const app = express()` + `export default app`（仅 `export default createApp()` 不会被识别为云函数）；
+- 框架模式的函数文件名必须是 `[[xxx]]` 格式，`index.js` 这类普通文件名不会被注册；
+- 根级 `[[default]].js` 生成 catch-all 路由 `^/(.*)$`，接管全部 API 路径。
+
+**edgeone.json 关键配置**：
+
+```json
+{
+  "cloudFunctions": {
+    "maxDuration": 120,
+    "includeFiles": ["cloud-functions/sources/**"],
+    "externalNodeModules": ["@jsquash/webp", "@jsquash/jpeg", "@jsquash/png", "@jsquash/avif", "@jsquash/resize", "jsdom", "image-q"],
+    "regions": { "overseas": ["ap-singapore"] }
+  }
+}
+```
+
+- `includeFiles`：把漫画源目录复制进函数包（构建产物中位于 `included_files/cloud-functions/sources/`，代码已做路径回退兼容）；
+- `externalNodeModules`：jsquash 的 `.wasm` 与 jsdom 等含静态文件的包必须声明，构建器会单独安装而非 bundle；
+- `regions.overseas`：上游多为海外站点，部署到海外地域。
+
+**本地验证部署产物**（与 EdgeOne 构建产物一致）：
+
+```bash
+npm run build:edgeone
+node .edgeone/cloud-functions/api-node/index.mjs   # http://localhost:9000
+```
+
+**部署**：将仓库导入 EdgeOne Makers（导入 Git 仓库），框架预设选择"自定义"（纯云函数项目，无前端构建）。公网地址经 `Eo-Pages-Host` 请求头自动识别；若有异常可配置环境变量 `PUBLIC_URL=https://your-domain` 强制指定。
 
 可选环境变量：
 
 | 变量 | 说明 |
 | --- | --- |
 | `PUBLIC_URL` | 强制指定对外基础地址（EdgeOne 上通常不需要） |
-| `SOURCES_DIR` | 漫画源目录（默认 `cloud-functions/sources`） |
-
-> 上游多为海外站点，建议在 `edgeone.json` 的 `cloudFunctions` 中配置 `overseasRegions`（如 `["ap-singapore"]`）。
+| `SOURCES_DIR` | 漫画源目录（默认自动探测 `cloud-functions/sources` 或构建产物内 `included_files/`） |
 
 ## 🧪 全量源测试
 
