@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { getBaseUrlFromRequest } from '@/core/http'
 import { proxyImage } from '@/core/image/proxy'
 import { errorStatus } from '@/core/network'
@@ -32,10 +33,25 @@ export async function GET(req: Request) {
       }
     )
 
+    const etag = `"${createHash('sha256').update(result.body).digest('hex').slice(0, 32)}"`
+    const ifNoneMatch = req.headers.get('if-none-match')
+    if (!result.private && ifNoneMatch && ifNoneMatch.split(',').map((s) => s.trim()).includes(etag)) {
+      return new Response(null, {
+        status: 304,
+        headers: {
+          'ETag': etag,
+          'Cache-Control': 'public, max-age=86400, s-maxage=86400',
+          'CDN-Cache-Control': 'public, max-age=86400'
+        }
+      })
+    }
+
     return new Response(new Uint8Array(result.body), {
       headers: {
         'Content-Type': result.contentType,
         'Cache-Control': result.private || req.headers.has('authorization') ? 'private, no-store' : 'public, max-age=86400, s-maxage=86400',
+        'CDN-Cache-Control': result.private || req.headers.has('authorization') ? 'private, no-store' : 'public, max-age=86400',
+        'ETag': etag,
         'Content-Length': String(result.body.length),
         'X-Image-Original-Size': result.originalSize || '',
         'X-Image-Actual-Size': result.actualSize || '',

@@ -38,7 +38,8 @@ export async function getSourceConfigs(baseUrl: string): Promise<Record<string, 
       detailPath: `/api/${key}/album/<id>`,
       photoPath: `/api/${key}/photo/<id>/chapter/<chapter>`,
       searchPath: `/api/${key}/search/<text>/<page>`,
-      type: 'venera'
+      type: 'venera',
+      idType: key === 'manga_dex' ? 'uuid' : key === 'copy_manga' ? 'slug' : 'string'
     }
   }
 

@@ -12,7 +12,7 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         DEPLOY_TARGET: 'server',
-        PORT: '3000',
+        PORT: '3008',
         CACHE_DRIVER: 'file',
         IMAGE_CACHE_DRIVER: 'file',
         CACHE_DIR: './data/cache',

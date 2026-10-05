@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import cors from '@fastify/cors'
 import Fastify from 'fastify'
 import { getAppConfig } from './core/config'
@@ -137,11 +138,23 @@ export async function createServer() {
         }
       )
 
+      const etag = `"${createHash('sha256').update(result.body).digest('hex').slice(0, 32)}"`
+      const ifNoneMatch = req.headers['if-none-match']
+      if (!result.private && ifNoneMatch && ifNoneMatch.split(',').map((s) => s.trim()).includes(etag)) {
+        reply.code(304)
+        reply.header('ETag', etag)
+        reply.header('Cache-Control', 'public, max-age=86400')
+        reply.header('CDN-Cache-Control', 'public, max-age=86400')
+        return reply.send()
+      }
+
       reply.header('Content-Type', result.contentType)
       reply.header('Cache-Control', result.private ? 'private, no-store' : 'public, max-age=86400')
-      reply.header('Content-Length',result.body.length)
-      reply.header('X-Image-Original-Size',result.originalSize || '')
-      reply.header('X-Image-Actual-Size',result.actualSize || '')
+      reply.header('CDN-Cache-Control', result.private ? 'private, no-store' : 'public, max-age=86400')
+      reply.header('ETag', etag)
+      reply.header('Content-Length', result.body.length)
+      reply.header('X-Image-Original-Size', result.originalSize || '')
+      reply.header('X-Image-Actual-Size', result.actualSize || '')
       reply.header('X-Cache', result.cacheHit ? 'HIT' : 'MISS')
       return reply.send(result.body)
     } catch (error) {

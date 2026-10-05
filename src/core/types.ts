@@ -11,6 +11,7 @@ export interface SourceConfig {
   photoPath: string
   searchPath: string
   type: string
+  idType?: string
 }
 
 export interface ComicSearchResult {
