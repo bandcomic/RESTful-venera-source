@@ -4,6 +4,8 @@ import path from 'node:path'
 import vm from 'node:vm'
 import * as cheerio from 'cheerio'
 import type { RequestContext } from '../types'
+import { getAppConfig } from '../config'
+import { ApiError, boundedFetch } from '../network'
 
 export interface VeneraSource {
   name: string
@@ -18,7 +20,7 @@ export interface VeneraSource {
     loadInfo?: (id: string) => Promise<any>
     loadEp?: (comicId: string, epId: string) => Promise<{ images: string[] }>
     onImageLoad?: (url: string, comicId?: string, epId?: string) => any | Promise<any>
-    onThumbnailLoad?: (url: string) => any | Promise<any>
+    onThumbnailLoad?: (url: string, comicId?: string, epId?: string) => any | Promise<any>
   }
   loadData: (key: string) => any
   saveData: (key: string, value: any) => void
@@ -30,6 +32,8 @@ export interface VeneraSource {
 const sourceCache = new Map<string, VeneraSource>()
 const dataStore = new Map<string, Record<string, any>>()
 const settingsStore = new Map<string, Record<string, any>>()
+const loading = new Map<string, Promise<VeneraSource>>()
+const sourceTimes = new Map<string, number>()
 
 function sourcePath(sourceKey: string): string {
   return path.join(process.cwd(), 'sources', `${sourceKey}.js`)
@@ -259,9 +263,9 @@ function createNetwork(sourceKey: string, context?: RequestContext) {
       mergedHeaders.Cookie = cookie
     }
 
-    let response: Response
+    let response: Awaited<ReturnType<typeof boundedFetch>>
     try {
-      response = await fetch(normalizeRequestUrl(url), {
+      response = await boundedFetch(normalizeRequestUrl(url), {
         method,
         headers: mergedHeaders,
         body: data == null || method === 'GET' ? undefined : typeof data === 'string' ? data : Buffer.from(data)
@@ -270,7 +274,7 @@ function createNetwork(sourceKey: string, context?: RequestContext) {
       throw new Error(`Request failed: ${method} ${url} - ${error instanceof Error ? error.message : String(error)}`)
     }
 
-    const body = bytes ? new Uint8Array(await response.arrayBuffer()) : await response.text()
+    const body = bytes ? new Uint8Array(response.body) : response.body.toString('utf8')
     const resultHeaders: Record<string, string> = {}
     response.headers.forEach((value, key) => {
       resultHeaders[key] = value
@@ -308,6 +312,7 @@ function createFetch(Network: ReturnType<typeof createNetwork>) {
 }
 
 function createContext(sourceKey: string, requestContext?: RequestContext): vm.Context {
+  const storeKey = sourceKey + ':' + createHash('sha256').update(requestContext?.cookie || sourceCookie(sourceKey) || '').digest('hex')
   const Network = createNetwork(sourceKey, requestContext)
   const Convert = createConvert()
 
@@ -327,23 +332,25 @@ function createContext(sourceKey: string, requestContext?: RequestContext): vm.C
     translation: any = {}
 
     loadData(key: string) {
-      return getStore(dataStore, sourceKey)[key]
+      return getStore(dataStore, storeKey)[key]
     }
 
     saveData(key: string, value: any) {
-      getStore(dataStore, sourceKey)[key] = value
+      const store = getStore(dataStore, storeKey)
+      if (Buffer.byteLength(JSON.stringify({ ...store, [key]: value })) > Number(process.env.SOURCE_DATA_BYTES || 1048576)) throw new ApiError(413, 'Source state budget exceeded')
+      store[key] = value
     }
 
     deleteData(key: string) {
-      delete getStore(dataStore, sourceKey)[key]
+      delete getStore(dataStore, storeKey)[key]
     }
 
     loadSetting(key: string) {
-      return getStore(settingsStore, sourceKey)[key]
+      return getStore(settingsStore, storeKey)[key]
     }
 
     saveSetting(key: string, value: any) {
-      getStore(settingsStore, sourceKey)[key] = value
+      getStore(settingsStore, storeKey)[key] = value
     }
 
     get isLogged() {
@@ -400,12 +407,30 @@ function applyDefaultSettings(source: VeneraSource) {
 
 export function clearRuntimeCache() {
   sourceCache.clear()
+  dataStore.clear()
+  settingsStore.clear()
+  sourceTimes.clear()
 }
 
 export async function loadSource(sourceKey: string, context?: RequestContext): Promise<VeneraSource> {
-  const cacheKey = `${sourceKey}:${context?.cookie || ''}`
+  if (!/^[a-z_]+$/.test(sourceKey) || !getAppConfig().enabledSources.includes(sourceKey)) throw new ApiError(404, 'Source disabled or unknown')
+  const cacheKey = `${sourceKey}:${createHash('sha256').update(context?.cookie || sourceCookie(sourceKey) || '').digest('hex')}`
+  for (const [key, time] of sourceTimes) {
+    if (Date.now()-time > Number(process.env.SOURCE_TTL_MS || 1800000)) { sourceCache.delete(key); sourceTimes.delete(key); dataStore.delete(key); settingsStore.delete(key) }
+  }
   const cached = sourceCache.get(cacheKey)
   if (cached) return cached
+  const pending = loading.get(cacheKey)
+  if (pending) return pending
+  if (loading.size >= Number(process.env.SOURCE_CACHE_ENTRIES || 64)) throw new ApiError(503,'Source initialization busy')
+  const job = instantiateSource(sourceKey,context,cacheKey)
+  loading.set(cacheKey,job)
+  try { return await job } catch(error) {
+    dataStore.delete(cacheKey); settingsStore.delete(cacheKey); throw error
+  } finally { loading.delete(cacheKey) }
+}
+
+async function instantiateSource(sourceKey: string, context: RequestContext | undefined, cacheKey: string): Promise<VeneraSource> {
 
   const file = sourcePath(sourceKey)
   if (!existsSync(file)) {
@@ -428,14 +453,15 @@ export async function loadSource(sourceKey: string, context?: RequestContext): P
   applyDefaultSettings(source)
 
   if (typeof (source as any).init === 'function') {
-    try {
-      await Promise.resolve((source as any).init())
-    } catch {
-      // ignore init errors to allow partial functionality
-    }
+    await Promise.resolve((source as any).init())
   }
 
   sourceCache.set(cacheKey, source)
+  sourceTimes.set(cacheKey, Date.now())
+  while (sourceCache.size > Number(process.env.SOURCE_CACHE_ENTRIES || 64)) {
+    const oldest = sourceCache.keys().next().value!
+    sourceCache.delete(oldest); sourceTimes.delete(oldest); dataStore.delete(oldest); settingsStore.delete(oldest)
+  }
   return source
 }
 

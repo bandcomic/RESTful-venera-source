@@ -148,3 +148,7 @@ POST /reload
 
 ---
 *本项目仅供学习交流使用，请勿用于非法用途。*
+# 三平台部署更新
+
+当前统一使用 TypeScript 业务核心。部署入口、原生依赖打包、图片/缓存预算与
+本地验证步骤见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)。

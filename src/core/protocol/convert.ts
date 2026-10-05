@@ -1,3 +1,4 @@
+import { ApiError } from '../network'
 function isMapLike(value: unknown): value is Map<unknown, unknown> {
   return Object.prototype.toString.call(value) === '[object Map]'
 }
@@ -52,8 +53,9 @@ export function getChapterIdByIndex(chapters: unknown, chapter: string): string 
 
   if (typeof chapters === 'object') {
     const keys = Object.keys(chapters as Record<string, unknown>)
-    return keys[targetIndex] || chapter
+    if (keys[targetIndex]) return keys[targetIndex]
+    throw new ApiError(404, 'Chapter not found')
   }
 
-  return chapter
+  throw new ApiError(404, 'Chapter not found')
 }

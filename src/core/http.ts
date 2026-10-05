@@ -1,10 +1,13 @@
 export function getBaseUrlFromRequest(req: Request): string {
+  if (process.env.PUBLIC_URL) return process.env.PUBLIC_URL.replace(/\/$/, '')
+  const eoHost = req.headers.get('eo-pages-host')
+  if (eoHost) return 'https://' + eoHost
   const forwardedProto = req.headers.get('x-forwarded-proto')
   const forwardedHost = req.headers.get('x-forwarded-host')
   const host = forwardedHost || req.headers.get('host')
 
   if (host) {
-    return `${forwardedProto || 'https'}://${host}`
+    return `${(forwardedProto || 'https').split(',')[0].trim()}://${host.split(',')[0].trim()}`
   }
 
   const url = new URL(req.url)
@@ -12,6 +15,8 @@ export function getBaseUrlFromRequest(req: Request): string {
 }
 
 export function getBaseUrlFromFastifyRequest(headers: Record<string, unknown>, protocol: string): string {
+  if (process.env.PUBLIC_URL) return process.env.PUBLIC_URL.replace(/\/$/, '')
+  if (headers['eo-pages-host']) return 'https://' + headers['eo-pages-host']
   const forwardedProto = String(headers['x-forwarded-proto'] || protocol || 'http')
   const forwardedHost = headers['x-forwarded-host']
   const host = String(forwardedHost || headers.host || 'localhost:3000')

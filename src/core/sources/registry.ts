@@ -31,7 +31,8 @@ export async function getSourceConfigs(baseUrl: string): Promise<Record<string, 
   const keys = await getEnabledSourceKeys()
 
   for (const key of keys) {
-    result[key] = {
+    const catalogKey = process.env.LEGACY_SOURCE_KEYS === '1' ? fallbackNames[key] || key : key
+    result[catalogKey] = {
       name: readSourceName(key),
       apiUrl: baseUrl,
       detailPath: `/api/${key}/album/<id>`,

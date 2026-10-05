@@ -15,7 +15,8 @@
     "pm2:restart": "npm run server:build && pm2 restart venera-source-converter",
     "pm2:stop": "pm2 stop venera-source-converter",
     "pm2:logs": "pm2 logs venera-source-converter",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "npm run server:build && node --test tests/*.test.cjs"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",

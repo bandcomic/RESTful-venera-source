@@ -6,16 +6,55 @@ import { proxyImage } from './core/image/proxy'
 import { getComicDetail, getPhotoList, searchComic } from './core/protocol/service'
 import { clearRuntimeCache } from './core/runtime/venera'
 import { getSourceConfigs } from './core/sources/registry'
+import { errorStatus } from './core/network'
+import { ApiError } from './core/network'
 
 process.on('unhandledRejection', (reason) => {
   console.error('Unhandled Rejection:', reason)
 })
 
-async function main() {
+export async function createServer() {
   const config = getAppConfig()
   const fastify = Fastify({ logger: true })
 
   await fastify.register(cors, { origin: true })
+  fastify.addHook('onSend', async (req,reply,payload) => {
+    const policy = req.headers.cookie || req.headers.authorization ? 'private, no-store' : reply.statusCode >= 400 ? 'no-store' : reply.getHeader('Cache-Control') || 'private, no-cache'
+    reply.header('Cache-Control',policy).header('CDN-Cache-Control',policy)
+    if ([429,503].includes(reply.statusCode)) reply.header('Retry-After','2')
+    return payload
+  })
+  fastify.get('/health', async () => ({status:'ok'}))
+  const aliases: Record<string,string> = {'拷贝漫画':'copy_manga',MangaDex:'manga_dex',nhentai:'nhentai',Picacg:'picacg'}
+  const legacySource = (query: Record<string,string>) => {
+    const key = aliases[query.source] || query.source
+    if (!key) throw new ApiError(400,'Missing source')
+    return key
+  }
+  // Saved pre-TypeScript source configurations and offline identities continue working.
+  for (const route of ['/comic/:id','/photo/:id/chapter/:chapter','/search/:text/:page']) {
+    fastify.get(route, async (req,reply) => {
+      try {
+        const params = req.params as Record<string,string>, query = req.query as Record<string,string>
+        const context = {baseUrl:getBaseUrlFromFastifyRequest(req.headers,req.protocol),cookie:req.headers.cookie,userAgent:req.headers['user-agent']}
+        const key = legacySource(query)
+        if (params.text) return await searchComic(key,params.text,Number(params.page),context)
+        if (params.chapter) return await getPhotoList(key,params.id,params.chapter,context)
+        return await getComicDetail(key,params.id,context)
+      } catch(error) { reply.code(errorStatus(error)); return {code:errorStatus(error),message:error instanceof Error?error.message:String(error)} }
+    })
+  }
+  for (const route of ['/proxy','/image/proxy']) {
+    fastify.get(route,async(req,reply)=>{
+      try {
+        const query=req.query as Record<string,string>
+        const result=await proxyImage({...query,url:query.url,width:query.width||query.w,quality:query.quality||query.q,source:query.source?legacySource(query):undefined},
+          {baseUrl:getBaseUrlFromFastifyRequest(req.headers,req.protocol),cookie:req.headers.cookie,userAgent:req.headers['user-agent']})
+        reply.header('Content-Type',result.contentType).header('Cache-Control',result.private?'private, no-store':'public, max-age=86400')
+        return reply.send(result.body)
+      } catch(error) { reply.code(errorStatus(error)); return {code:errorStatus(error),message:error instanceof Error?error.message:String(error)} }
+    })
+  }
 
   fastify.get('/', async () => ({
     status: 'ok',
@@ -31,14 +70,14 @@ async function main() {
   fastify.get<{ Params: { source: string; id: string } }>('/api/:source/album/:id', async (req, reply) => {
     try {
       const baseUrl = getBaseUrlFromFastifyRequest(req.headers, req.protocol)
-      return await getComicDetail(req.params.source, decodeURIComponent(req.params.id), {
+      return await getComicDetail(req.params.source, req.params.id, {
         baseUrl,
         userAgent: req.headers['user-agent'],
         cookie: req.headers.cookie
       })
     } catch (error) {
-      reply.code(500)
-      return { code: 500, message: error instanceof Error ? error.message : String(error) }
+      reply.code(errorStatus(error))
+      return { code: errorStatus(error), message: error instanceof Error ? error.message : String(error) }
     }
   })
 
@@ -51,22 +90,22 @@ async function main() {
         cookie: req.headers.cookie
       })
     } catch (error) {
-      reply.code(500)
-      return { code: 500, message: error instanceof Error ? error.message : String(error) }
+      reply.code(errorStatus(error))
+      return { code: errorStatus(error), message: error instanceof Error ? error.message : String(error) }
     }
   })
 
   fastify.get<{ Params: { source: string; id: string; chapter: string } }>('/api/:source/photo/:id/chapter/:chapter', async (req, reply) => {
     try {
       const baseUrl = getBaseUrlFromFastifyRequest(req.headers, req.protocol)
-      return await getPhotoList(req.params.source, decodeURIComponent(req.params.id), decodeURIComponent(req.params.chapter), {
+      return await getPhotoList(req.params.source, req.params.id, req.params.chapter, {
         baseUrl,
         userAgent: req.headers['user-agent'],
         cookie: req.headers.cookie
       })
     } catch (error) {
-      reply.code(500)
-      return { code: 500, message: error instanceof Error ? error.message : String(error) }
+      reply.code(errorStatus(error))
+      return { code: errorStatus(error), message: error instanceof Error ? error.message : String(error) }
     }
   })
 
@@ -86,7 +125,8 @@ async function main() {
           comicId: query.comicId,
           epId: query.epId,
           width: query.width || query.w,
-          quality: query.quality,
+          quality: query.quality || query.q,
+          thumbnail: query.thumbnail,
           ifPNG: query.ifPNG,
           ifLVGL: query.ifLVGL
         },
@@ -98,12 +138,15 @@ async function main() {
       )
 
       reply.header('Content-Type', result.contentType)
-      reply.header('Cache-Control', 'public, max-age=86400')
+      reply.header('Cache-Control', result.private ? 'private, no-store' : 'public, max-age=86400')
+      reply.header('Content-Length',result.body.length)
+      reply.header('X-Image-Original-Size',result.originalSize || '')
+      reply.header('X-Image-Actual-Size',result.actualSize || '')
       reply.header('X-Cache', result.cacheHit ? 'HIT' : 'MISS')
       return reply.send(result.body)
     } catch (error) {
-      reply.code(500)
-      return { code: 500, message: error instanceof Error ? error.message : String(error) }
+      reply.code(errorStatus(error))
+      return { code: errorStatus(error), message: error instanceof Error ? error.message : String(error) }
     }
   })
 
@@ -117,10 +160,10 @@ async function main() {
     return { status: 'ok' }
   })
 
-  await fastify.listen({ port: config.port, host: '0.0.0.0' })
+  return fastify
 }
 
-main().catch((error) => {
+if (require.main === module) createServer().then(server => server.listen({port:getAppConfig().port,host:'0.0.0.0'})).catch((error) => {
   console.error(error)
   process.exit(1)
 })
